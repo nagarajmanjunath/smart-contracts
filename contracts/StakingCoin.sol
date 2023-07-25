@@ -42,4 +42,19 @@ contract StakingCoin {
         emit Transfer(_from, _to, _value);
         return true;
     }
+
+    function mint(address _to, uint256 _value) public returns (bool success) {
+        totalSupply += _value;
+        balanceOf[_to] += _value;
+        emit Transfer(address(0), _to, _value);
+        return true;
+    }
+
+    function burn(address _from, uint256 _value) public returns (bool success) {
+        require(balanceOf[_from] >= _value);
+        totalSupply -= _value;
+        balanceOf[_from] -= _value;
+        emit Transfer(_from, address(0), _value);
+        return true;
+    }
 }

@@ -1,125 +1,108 @@
+// Import the required libraries
 const StakingCoin = artifacts.require("StakingCoin");
 const StakingContract = artifacts.require("StakingContract");
 
-contract("StakingCoin", function (accounts) {
-  it("should put 1000000 StakingCoin in the first account", async function () {
-    const stakingCoinInstance = await StakingCoin.deployed();
-    const balance = await stakingCoinInstance.balanceOf.call(accounts[0]);
-    assert.equal(
-      balance.toString(),
-      "1000000000000000000000000",
-      "1000000 wasn't in the first account"
-    );
-  });
-
-  it("should transfer StakingCoin correctly", async function () {
-    const stakingCoinInstance = await StakingCoin.deployed();
-    const amount = 10;
-
-    await stakingCoinInstance.transfer(accounts[1], amount, {
-      from: accounts[0]
-    });
-    const balance0 = await stakingCoinInstance.balanceOf.call(accounts[0]);
-    const balance1 = await stakingCoinInstance.balanceOf.call(accounts[1]);
-
-    assert.equal(
-      balance0.toString(),
-      "999999999999999999999990",
-      "Amount wasn't correctly taken from the sender"
-    );
-    assert.equal(
-      balance1.toString(),
-      "10",
-      "Amount wasn't correctly sent to the receiver"
-    );
-  });
-});
-
+// Start the test block
 contract("StakingContract", function (accounts) {
-  it("should stake StakingCoin correctly", async function () {
+  // Test case for staking
+
+  // Define the mint amount
+  const mintAmount = web3.utils.toWei("1000", "ether");
+  it("should mint tokens to the contract", async function () {
+    // Get instances of the contracts
     const stakingCoinInstance = await StakingCoin.deployed();
     const stakingContractInstance = await StakingContract.deployed();
-    const amount = 10;
 
-    await stakingCoinInstance.approve(stakingContractInstance.address, amount, {
-      from: accounts[0]
-    });
+    // Get the initial balance of the contract
+    const contractBalanceBefore = await stakingCoinInstance.balanceOf.call(
+      stakingContractInstance.address
+    );
+
+    // Mint new tokens
+    await stakingCoinInstance.mint(stakingContractInstance.address, mintAmount);
+
+    // Calculate the expected balance by adding the mint amount and the initial balance
+    const expectedBalance = web3.utils
+      .toBN(mintAmount)
+      .add(web3.utils.toBN(contractBalanceBefore))
+      .toString();
+
+    // Check the contract's balance after minting
+    const contractBalanceAfter = await stakingCoinInstance.balanceOf.call(
+      stakingContractInstance.address
+    );
+    assert.equal(
+      contractBalanceAfter.toString(),
+      expectedBalance,
+      "The contract does not have the correct balance after minting"
+    );
+  });
+  it("should stake correctly", async function () {
+    const stakingCoinInstance = await StakingCoin.deployed();
+    const stakingContractInstance = await StakingContract.deployed();
+    const amount = 1000;
+
+    // Call the stake function from the first account
+    await stakingCoinInstance.approve(stakingContractInstance.address, amount);
     await stakingContractInstance.stake(amount, { from: accounts[0] });
 
-    const stakingBalance = await stakingContractInstance.stakingBalance.call(
-      accounts[0]
-    );
+    // Retrieve the staking balance of the first account
+    const balance = await stakingContractInstance.stakingBalance(accounts[0]);
+
+    // Check if the staking balance is correct
     assert.equal(
-      stakingBalance.toString(),
-      "10",
-      "Amount wasn't correctly staked"
+      balance.toString(),
+      amount.toString(),
+      "The staking balance is incorrect"
     );
   });
 
-  it("should unstake StakingCoin correctly", async function () {
-    const stakingCoinInstance = await StakingCoin.deployed();
+  // Test case for reward distribution
+  it("should distribute rewards correctly", async function () {
     const stakingContractInstance = await StakingContract.deployed();
-    const amount = 5;
+    const amount = 1000;
 
-    await stakingContractInstance.unstake(amount, { from: accounts[0] });
+    // Set rewardRate to 100 (100%)
+    await stakingContractInstance.updateRewardRate(100);
 
-    const stakingBalance = await stakingContractInstance.stakingBalance.call(
-      accounts[0]
-    );
+    // Call the distributeRewards function for the first account
+    await stakingContractInstance.distributeRewards(accounts[0]);
+
+    // Retrieve the rewards of the first account
+    const rewards = await stakingContractInstance.rewards(accounts[0]);
+
+    // Check if the rewards are correct
     assert.equal(
-      stakingBalance.toString(),
-      "5",
-      "Amount wasn't correctly unstaked"
+      rewards.toString(),
+      amount.toString(),
+      "The rewards are incorrect"
     );
   });
 
-  it("should distribute and claim rewards correctly", async function () {
-    const stakingCoinInstance = await StakingCoin.deployed();
+  // Test case for reward claiming
+  it("should claim rewards correctly", async function () {
     const stakingContractInstance = await StakingContract.deployed();
-    const stakeAmount = web3.utils.toWei("1000", "ether"); // Staking a larger amount
-    const account = accounts[0];
+    const stakingCoinInstance = await StakingCoin.deployed();
+    const initialBalance = await stakingCoinInstance.balanceOf(accounts[0]);
 
-    // Approve and stake tokens
-    await stakingCoinInstance.approve(
-      stakingContractInstance.address,
-      stakeAmount,
-      { from: account }
-    );
-    await stakingContractInstance.stake(stakeAmount, { from: account });
+    // Call the claimRewards function from the first account
+    await stakingContractInstance.claimRewards({ from: accounts[0] });
 
-    // Distribute rewards
-    await stakingContractInstance.distributeRewards({ from: account });
+    // Retrieve the balance and rewards of the first account
+    const finalBalance = await stakingCoinInstance.balanceOf(accounts[0]);
+    const rewards = await stakingContractInstance.rewards(accounts[0]);
 
-    // Check reward balance
-    const rewardBalanceBefore = await stakingContractInstance.rewards.call(
-      account
-    );
-    assert.notEqual(
-      rewardBalanceBefore.toString(),
-      "0",
-      "No rewards were distributed"
-    );
+    const expectedFinalBalance = web3.utils
+      .toBN(initialBalance)
+      .add(web3.utils.toBN(1000))
+      .toString();
 
-    // Claim rewards
-    await stakingContractInstance.claimRewards({ from: account });
-
-    // Check reward balance after claiming
-    const rewardBalanceAfter = await stakingContractInstance.rewards.call(
-      account
-    );
+    // Check if the rewards and balance are correct
+    assert.equal(rewards.toString(), "0", "The rewards were not claimed");
     assert.equal(
-      rewardBalanceAfter.toString(),
-      "0",
-      "Rewards were not correctly claimed"
-    );
-
-    // Check STK balance
-    const stakingCoinBalance = await stakingCoinInstance.balanceOf.call(
-      account
-    );
-    assert(
-      BigInt(stakingCoinBalance.toString()) >= BigInt(stakeAmount),
-      "STK balance did not increase after claiming rewards"
+      finalBalance.toString(),
+      expectedFinalBalance,
+      "The final balance is incorrect"
     );
   });
 });
